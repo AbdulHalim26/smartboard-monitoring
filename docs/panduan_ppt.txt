@@ -284,7 +284,49 @@ Penjelasan tiap tahap:
 
 
 # ────────────────────────────────────────────────────────────
-#  SLIDE 9: MACHINE LEARNING — Decision Tree
+#  SLIDE 9: PROSESING DI DALAM ML (Feature Engineering)
+# ────────────────────────────────────────────────────────────
+
+[Gambar: flow_processing_in_ml.png]
+
+Sebelum data masuk ke algoritma (Decision Tree / ARIMA), data
+diolah lagi menjadi FITUR. Ini yang "reprocessing" di dalam ML:
+
+  INPUT: DATA BERSIH (975 baris: temp, hum, gas, status)
+      │
+      ▼
+  FEATURE ENGINEERING (compute_features)
+  Untuk tiap sensor (temp/hum/gas) dibuat fitur turunan:
+    • mean rolling 10 baris   →  …_mean10
+    • standar deviasi rolling →  …_std10
+    • selisih antar baris     →  …_delta
+    • jam dalam sehari        →  hour
+  ⇓ Total 13 kolom fitur (FEATURE_COLS)
+      │
+      ├──────── Decision Tree ──────────┐
+      │  Split: fitur + label (status)   │
+      │  Training (max_depth=6)          │
+      │  predict_proba → confidence      │
+      │  → NORMAL/WASPADA/BAHAYA        │
+      │                                 │
+      └───────── ARIMA ──────────────────┘
+         Resample per jam (mean)
+         ARIMA(1,1,1) + forecast(3)
+         → prediksi +1/+2/+3 jam
+
+Mengapa dibuat fitur turunan ini?
+  - Karena kondisi ruangan tidak hanya dari nilai sesaat,
+    tetapi juga dari TREN/pergerakannya (naik/turun cepat).
+  - mean/std rolling menangkap tren & variabilitas.
+  - delta menangkap seberapa cepat nilai berubah.
+  - hour membantu mendeteksi pola berdasar jam (mis. siang
+    lebih panas, dll).
+
+Hasilnya: model lebih akurat daripada hanya pakai 3 nilai mentah.
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 10: MACHINE LEARNING — Decision Tree
 # ────────────────────────────────────────────────────────────
 
 Tujuan: Klasifikasi status ruangan
@@ -312,7 +354,7 @@ Training:
 
 
 # ────────────────────────────────────────────────────────────
-#  SLIDE 9: MACHINE LEARNING — ARIMA Prediksi Tren
+#  SLIDE 11: MACHINE LEARNING — ARIMA Prediksi Tren
 # ────────────────────────────────────────────────────────────
 
 Tujuan: Prediksi suhu, kelembapan, gas untuk +1, +2, +3 jam ke depan
@@ -335,7 +377,7 @@ Contoh output:
 
 
 # ────────────────────────────────────────────────────────────
-#  SLIDE 10: AUTO-FAN (ESP32 Polling Supabase)
+#  SLIDE 12: AUTO-FAN (ESP32 Polling Supabase)
 # ────────────────────────────────────────────────────────────
 
 Mode autocloud:
@@ -356,7 +398,7 @@ Keamanan:
 
 
 # ────────────────────────────────────────────────────────────
-#  SLIDE 11: EDA (Exploratory Data Analysis)
+#  SLIDE 13: EDA (Exploratory Data Analysis)
 # ────────────────────────────────────────────────────────────
 
 Tujuan: Menentukan threshold NORMAL/WASPADA/BAHAYA dari data riil
@@ -384,7 +426,7 @@ Threshold final (gabungan data + referensi kesehatan):
 
 
 # ────────────────────────────────────────────────────────────
-#  SLIDE 12: DASHBOARD WEB
+#  SLIDE 14: DASHBOARD WEB
 # ────────────────────────────────────────────────────────────
 
 Tampilan:
@@ -414,7 +456,7 @@ Mode demo: jika Supabase belum dikonfigurasi
 
 
 # ────────────────────────────────────────────────────────────
-#  SLIDE 13: STRUKTUR FOLDER PROYEK
+#  SLIDE 15: STRUKTUR FOLDER PROYEK
 # ────────────────────────────────────────────────────────────
 
 smartboard-monitoring/
@@ -438,7 +480,7 @@ smartboard-monitoring/
 
 
 # ────────────────────────────────────────────────────────────
-#  SLIDE 14: KELEBIHAN SISTEM
+#  SLIDE 16: KELEBIHAN SISTEM
 # ────────────────────────────────────────────────────────────
 
 1. Offline-proof
@@ -464,7 +506,7 @@ smartboard-monitoring/
 
 
 # ────────────────────────────────────────────────────────────
-#  SLIDE 15: DEMO / CARA JALANKAN
+#  SLIDE 17: DEMO / CARA JALANKAN
 # ────────────────────────────────────────────────────────────
 
 1. Dashboard:
@@ -489,7 +531,7 @@ smartboard-monitoring/
 
 
 # ────────────────────────────────────────────────────────────
-#  SLIDE 16: REFERENSI
+#  SLIDE 18: REFERENSI
 # ────────────────────────────────────────────────────────────
 
 - scikit-learn: Decision Tree documentation
