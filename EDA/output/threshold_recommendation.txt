@@ -1,0 +1,27 @@
+# Threshold Recommendation — Data Riil Supabase
+Tanggal: 2026-09-02 20:52 | Baris data: 855
+
+## Statistik deskriptif
+Temp: mean=31.73±1.02 (p5=30.8 p95=32.8 max=33.8)
+Hum : mean=67.46±6.14 (min=56.0 max=76.0)
+Gas : mean=106±172 (max=3900.0)
+
+## Korelasi
+             temperature  humidity  gas_value
+temperature        1.000    -0.944     -0.238
+humidity          -0.944     1.000      0.076
+gas_value         -0.238     0.076      1.000
+
+## Threshold final (hasil EDA: data riil + referensi kesehatan)
+  TEMP_WASPADA = 33.0
+  TEMP_BAHAYA = 36.0
+  HUM_WASPADA_LOW = 30.0
+  HUM_WASPADA_HIGH = 75.0
+  GAS_WASPADA = 1500
+  GAS_BAHAYA = 2500
+
+ALASAN:
+- SUHU WASPADA=33.0: data normal kamu 31-33°C, jadi WASPADA mulai 33°C (bukan 30 placeholder yang terlalu agresif). BAHAYA=36°C (referensi hangat ekstrem).
+- HUMIDITAS LOW=30% (referensi kenyamanan; data kamu tak pernah <59% jadi 30 tidak bisa diturunkan dari data). HIGH=75% mendekati data max 76%.
+- GAS WASPADA=1500/BAHAYA=2500 (referensi MQ-135; data kamu sangat bersih <150, tak cukup untuk kalibrasi batas atas).
+- KORELASI temp vs hum = -0.94: sangat negatif (makin panas makin kering), wajar.
