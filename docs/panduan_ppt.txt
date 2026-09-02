@@ -223,7 +223,68 @@ DATA BERSIH (975 baris) → masuk Decision Tree + ARIMA
 
 
 # ────────────────────────────────────────────────────────────
-#  SLIDE 8: MACHINE LEARNING — Decision Tree
+#  SLIDE 8: FLOW AFTER-ML (Post-Processing Hasil Model)
+# ────────────────────────────────────────────────────────────
+
+[Gambar: flow_after_ml.png]
+
+Setelah model (Decision Tree & ARIMA) menghasilkan output, hasilnya diproses:
+
+  OUTPUT MODEL ML
+      │
+      ▼
+┌─────────────────────────────────────────────┐
+│  A. CEK SPIKE PADA BARIS TERBARU            │
+│  ─ remove_spikes() pada data 'latest'      │
+│  ─ jika terdeteksi → tandai spike_removed  │
+│  ─ klasifikasi pakai nilai yg diluruskan   │
+└─────────────────────────────────────────────┘
+      │
+      ▼
+┌─────────────────────────────────────────────┐
+│  B. SIMPAN HASIL KE SUPABASE                │
+│  ─ ml_classifications:                      │
+│    status + confidence + spike_removed      │
+│  ─ ml_predictions:                          │
+│    nilai prediksi +1/+2/+3 jam ke depan     │
+└─────────────────────────────────────────────┘
+      │
+      ├───────────────┬───────────────┐
+      ▼               ▼               │
+┌──────────┐   ┌──────────┐          │
+│ C1.      │   │ C2.      │          │
+│ ACTUATOR │   │ DASHBOARD│          │
+│ (ESP32)  │   │ (Web)    │          │
+│ WASPADA/ │   │ Card:    │          │
+│ BAHAYA → │   │ klasifikasi│        │
+│ fan ON   │   │ + ARIMA  │          │
+└──────────┘   └──────────┘          │
+      │                │             │
+      └──────────────────────────────┘
+                       │  data sensor baru (feedback loop)
+                       ▼
+            ┌──────────────────────┐
+            │ D. FEEDBACK KE MODEL │
+            │ retrain Decision Tree│
+            │ tiap data baru       │
+            └──────────────────────┘
+
+Penjelasan tiap tahap:
+  A. Cek Spike  : pastikan hasil klasifikasi tidak dipengaruhi anomali
+                  (gas 3900) pada pembacaan terakhir.
+  B. Simpan     : hasil ditulis ke Supabase supaya bisa dibaca dashboard
+                  & ESP32 (REST + Realtime).
+  C1. Actuator  : ESP32 polling (mode autocloud, 15 dtk) →
+                  WASPADA/BAHAYA = fan ON + LED merah + buzzer;
+                  NORMAL = fan OFF + LED hijau.
+  C2. Dashboard : komponen React menampilkan status + confidence,
+                  dan prediksi ARIMA (+1/+2/+3 jam).
+  D. Feedback   : data baru tiap 60 dtk dipakai retrain model supaya
+                  tetap adaptif terhadap kondisi terbaru.
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 9: MACHINE LEARNING — Decision Tree
 # ────────────────────────────────────────────────────────────
 
 Tujuan: Klasifikasi status ruangan
