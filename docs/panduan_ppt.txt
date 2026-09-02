@@ -1,0 +1,440 @@
+# ============================================================
+#  PANDUAN PPT — Smart Room IoT Monitoring + AI/ML
+#  Siap copy-paste ke slide PowerPoint / Google Slides
+# ============================================================
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 1: JUDUL
+# ────────────────────────────────────────────────────────────
+
+Smart Room IoT Monitoring System
+dengan Integrasi Machine Learning
+
+- Abdul Halim
+- Internet of Things — Semester 5
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 2: RANCANGAN SISTEM (Arsitektur)
+# ────────────────────────────────────────────────────────────
+
+[IMAGE / DIAGRAM — salin ASCII di bawah ke PPT, atau gambar ulang]
+
+┌──────────┐   HTTP POST    ┌──────────┐    ┌────────────┐
+│          │  (tiap 10 dtk) │          │    │            │
+│   ESP32  │───────────────>│ Next.js  │───>│  Supabase  │
+│  DHT11   │                │   API    │    │ (Postgres) │
+│  MQ-135  │                └──────────┘    └─────┬──────┘
+│ LED+Fan  │                                      │
+└──────────┘                                      │
+      ▲              polling (15 dtk)       ┌─────▼──────┐
+      │  ┌────────────────────────────────  │  Python    │
+      │  │  baca ml_classifications         │  ML Backend │
+      │  │  WASPADA/BAHAYA → fan ON         │ (Decision  │
+      │  │  NORMAL        → fan OFF         │  Tree +    │
+      └──┘                                  │  ARIMA)    │
+                                            └────────────┘
+      ┌──────────────────────────────────────────┐
+      │          Next.js Dashboard (Web)         │
+      │  sensor cards | chart | alerts | AI/ML   │
+      └──────────────────────────────────────────┘
+
+Komponen:
+  1. ESP32 + Sensor   → baca suhu, kelembapan, kualitas udara
+  2. Next.js API      → terima data, simpan ke Supabase
+  3. Supabase         → database cloud + real-time
+  4. Python ML        → klasifikasi + prediksi tren
+  5. Dashboard Web    → tampilkan data real-time + hasil ML
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 3: LIBRARY / TEKNOLOGI YANG DIGUNAKAN
+# ────────────────────────────────────────────────────────────
+
+┌──────────────────┬──────────────────────────────────────────┐
+│ LAYER            │ LIBRARY / TEKNOLOGI                      │
+├──────────────────┼──────────────────────────────────────────┤
+│ Firmware ESP32   │ DHT.h (sensor DHT11)                    │
+│                  │ WiFi.h (koneksi WiFi)                    │
+│                  │ HTTPClient.h (HTTP POST)                 │
+│                  │ ArduinoJson.h (format JSON)              │
+├──────────────────┼──────────────────────────────────────────┤
+│ Backend API      │ Next.js 16 (App Router, TypeScript)     │
+│                  │ @supabase/supabase-js (database client) │
+│                  │ Zod (validasi data masuk)               │
+├──────────────────┼──────────────────────────────────────────┤
+│ Dashboard Web    │ React 19 (komponen UI)                  │
+│                  │ Recharts (grafik real-time)             │
+│                  │ Tailwind CSS (styling)                  │
+├──────────────────┼──────────────────────────────────────────┤
+│ Database         │ Supabase (PostgreSQL cloud + Realtime)  │
+├──────────────────┼──────────────────────────────────────────┤
+│ Machine Learning │ scikit-learn (Decision Tree)            │
+│                  │ statsmodels (ARIMA)                     │
+│                  │ pandas + numpy (manipulasi data)        │
+│                  │ joblib (simpan/load model)              │
+│                  │ matplotlib (grafik EDA)                 │
+└──────────────────┴──────────────────────────────────────────┘
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 4: INISIALISASI SENSOR & PENGATURAN PIN
+# ────────────────────────────────────────────────────────────
+
+// Pin Konfigurasi
+#define DHTPIN       4    // Data DHT11
+#define DHTTYPE      DHT11
+#define MQ135_AOUT   34   // Analog input MQ-135
+#define MQ135_DOUT   35   // Digital input (tidak dipakai)
+#define LED_RED      25   // LED indikator bahaya
+#define LED_GREEN    26   // LED indikator normal
+#define BUZZER       27   // Buzzer alarm
+#define RELAY_PIN    17   // Relay kipas (active LOW)
+
+// Koneksi WiFi
+const char *WIFI_SSID  = "YOKA 4G";
+const char *WIFI_PASS  = "123040506";
+const char *SERVER_URL = "http://192.168.1.31:3000/api/telemetry";
+
+// Inisialisasi di setup()
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED_RED, OUTPUT);
+  pinMode(LED_GREEN, OUTPUT);
+  pinMode(BUZZER, OUTPUT);
+  pinMode(RELAY_PIN, INPUT);  // relay: off saat ngambang
+  dht.begin();
+  connectWiFi();
+}
+
+Catatan:
+- Relay memakai active LOW: GPIO LOW = relay ON (kipas menyala)
+- Saat GPIO = INPUT (ngambang) → relay OFF (pull-up internal 5V)
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 5: PROSES PEMBACAAN SENSOR
+# ────────────────────────────────────────────────────────────
+
+Loop utama (non-blocking, pakai millis):
+
+  1. Baca sensor tiap 2 detik:
+     - DHT11 → temperature (°C) + humidity (%)
+     - MQ-135 → gas_value (ADC 0-4095)
+
+  2. Evaluasi threshold lokal (offline-proof):
+     - gas > 3500  → GAS alert
+     - temp > 40   → TEMP alert
+     - hum  > 75   → HUM alert
+     → Aktifkan LED merah + buzzer + fan
+
+  3. Kirim data ke server tiap 10 detik:
+     POST /api/telemetry
+     Body: {device_id, temperature, humidity, gas_value, fan_on, ...}
+     Header: x-api-key: rahasia-untuk-esp32
+
+  4. Cek WiFi berkala → reconnect jika putus
+
+  5. Serial Monitor → perintah manual:
+     hijau | merah | fan | buzzer | auto | autocloud | status
+
+Pembacaan sensor:
+  float temp = dht.readTemperature();
+  float hum  = dht.readHumidity();
+  int gas    = analogRead(MQ135_AOUT);
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 6: KIRIM DATA KE SERVER
+# ────────────────────────────────────────────────────────────
+
+void sendTelemetry() {
+  HTTPClient http;
+  http.begin(client, "http://192.168.1.31:3000/api/telemetry");
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("x-api-key", "rahasia-untuk-esp32");
+
+  JsonDocument doc;
+  doc["device_id"]    = "esp32-room-01";
+  doc["temperature"]  = lastTemp;
+  doc["humidity"]     = lastHum;
+  doc["gas_value"]    = lastGas;
+  doc["fan_on"]       = fanState;
+
+  String body;
+  serializeJson(doc, body);
+  int code = http.POST(body);  // 201 = berhasil
+  http.end();
+}
+
+Alur data:
+  ESP32 → HTTP POST → Next.js API → validasi (Zod) → Supabase
+                                                ↓
+                                         Dashboard (real-time)
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 7: FLOW PREPROCESSING (Pembersihan Data)
+# ────────────────────────────────────────────────────────────
+
+[DIAGRAM — salin ke PPT sebagai gambar]
+
+DATA MENTAH (975 baris dari Supabase)
+      │
+      ▼
+┌─────────────────────────────────────────────┐
+│  STEP 1: SPIKE DETECTION (IQR Method)       │
+│  ─ Hitung Q1, Q3, IQR per sensor            │
+│  ─ Batas: [Q1−1.5·IQR, Q3+1.5·IQR]        │
+│  ─ Nilai di luar = SPIKE                    │
+│  ─ Ganti spike dengan nilai SEBELUMNYA      │
+│    (forward-fill)                            │
+│                                              │
+│  Contoh: gas 3900 (anomali) → diluruskan 45 │
+│  Hasil: 18 spike terdeteksi & diluruskan    │
+└─────────────────────────────────────────────┘
+      │
+      ▼
+┌─────────────────────────────────────────────┐
+│  STEP 2: INTERPOLASI LINEAR (Data Hilang)   │
+│  ─ Gap 10-300 detik → diisi linear          │
+│    (rata-rata data sebelum & sesudah)       │
+│  ─ Gap > 300 detik → device mati, tidak     │
+│    diisi (data asli dipertahankan)          │
+│                                              │
+│  Contoh: gap 30 dtk → isi titik tengah      │
+│  Hasil: 27 baris terisi interpolasi         │
+└─────────────────────────────────────────────┘
+      │
+      ▼
+┌─────────────────────────────────────────────┐
+│  STEP 3: LABELING (Rule-Based)              │
+│  ─ temp≥36 atau gas≥2500 → BAHAYA          │
+│  ─ temp≥33 atau hum≤30/≥75 atau gas≥1500   │
+│    → WASPADA                                │
+│  ─ selainnya → NORMAL                       │
+│                                              │
+│  Hasil: 799 NORMAL, 171 WASPADA             │
+└─────────────────────────────────────────────┘
+      │
+      ▼
+DATA BERSIH (975 baris) → masuk Decision Tree + ARIMA
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 8: MACHINE LEARNING — Decision Tree
+# ────────────────────────────────────────────────────────────
+
+Tujuan: Klasifikasi status ruangan
+  Output: NORMAL / WASPADA / BAHAYA (+ confidence)
+
+Algoritma: Decision Tree Classifier (scikit-learn)
+  max_depth: 6  |  random_state: 42
+
+Fitur input (13 kolom):
+  temperature, humidity, gas_value
+  temperature_mean10, temperature_std10, temperature_delta
+  humidity_mean10, humidity_std10, humidity_delta
+  gas_value_mean10, gas_value_std10, gas_value_delta
+  hour (jam dalam sehari)
+
+Ground truth (label training):
+  Bukan dari data manual, tapi dari RULE-BASED threshold:
+  temp≥36 → BAHAYA, temp≥33 → WASPADA, selainnya NORMAL
+  (threshold hasil EDA dari data riil)
+
+Training:
+  - Data: 975 baris dari Supabase (24 jam terakhir)
+  - Retrain otomatis tiap 60 detik
+  - Model disimpan ke dt_classifier.joblib
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 9: MACHINE LEARNING — ARIMA Prediksi Tren
+# ────────────────────────────────────────────────────────────
+
+Tujuan: Prediksi suhu, kelembapan, gas untuk +1, +2, +3 jam ke depan
+
+Algoritma: ARIMA (AutoRegressive Integrated Moving Average)
+  Order: (1, 1, 1) — dari statsmodels
+  Resample data per jam (1 jam = 1 titik)
+
+Langkah:
+  1. Ambil data 24 jam terakhir
+  2. Resample per jam → rata-rata per jam
+  3. Fit model ARIMA(1,1,1)
+  4. Forecast 3 jam ke depan
+  5. Simpan ke tabel ml_predictions di Supabase
+
+Contoh output:
+  Suhu  : +1 jam = 31.2°C, +2 jam = 31.4°C, +3 jam = 31.3°C
+  Hum   : +1 jam = 68.5%,  +2 jam = 69.1%,  +3 jam = 69.3%
+  Gas   : +1 jam = 104,     +2 jam = 106,     +3 jam = 105
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 10: AUTO-FAN (ESP32 Polling Supabase)
+# ────────────────────────────────────────────────────────────
+
+Mode autocloud:
+  ESP32 polling tabel ml_classifications tiap 15 detik
+  → Baca predicted_status terbaru dari Python ML
+  → WASPADA/BAHAYA → nyalakan fan + LED merah + buzzer
+  → NORMAL         → matikan fan + nyalakan LED hijau
+
+Perintah Serial:
+  autocloud  → aktifkan mode ini
+  auto       → kembali mode sensor lokal
+  hijau/merah → manual override
+
+Keamanan:
+  - Anon key Supabase hanya boleh baca (RLS policy SELECT)
+  - Python backend menulis via service role
+  - ESP32 hanya membaca klasifikasi (tidak menulis)
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 11: EDA (Exploratory Data Analysis)
+# ────────────────────────────────────────────────────────────
+
+Tujuan: Menentukan threshold NORMAL/WASPADA/BAHAYA dari data riil
+  (bukan tebakan/placeholder)
+
+Data: 855 baris dari Supabase (16 Sep 2026 - 2 Sep 2026)
+
+Temuan:
+  Suhu : mean = 31.73°C, std = 1.02, range 28.4 - 33.8°C
+  Hum  : mean = 67.46%,  std = 6.14,  range 56 - 76%
+  Gas  : mean = 106 ADC, std = 172,   range 0 - 3900 (spike)
+
+Korelasi:
+  temp vs hum  = -0.94 (kuat negatif: makin panas makin kering)
+  temp vs gas  = -0.24 (lemah negatif)
+  hum  vs gas  =  0.08 (sangat lemah)
+
+Threshold final (gabungan data + referensi kesehatan):
+  TEMP_WASPADA = 33.0°C (data: p95 = 32.8°C)
+  TEMP_BAHAYA  = 36.0°C (referensi hangat ekstrem)
+  HUM_LOW      = 30.0%  (referensi kenyamanan)
+  HUM_HIGH     = 75.0%  (mendekati data max 76%)
+  GAS_WASPADA  = 1500   (referensi MQ-135)
+  GAS_BAHAYA   = 2500   (referensi MQ-135)
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 12: DASHBOARD WEB
+# ────────────────────────────────────────────────────────────
+
+Tampilan:
+  ┌──────────────────────────────────────────────┐
+  │ Smart Room Monitoring  [LIVE/OFFLINE]         │
+  ├──────────────┬──────────────┬───────────────┤
+  │ Suhu  31.3°C │ Hum  68%    │ Gas  112 ADC  │
+  ├──────────────┴──────────────┴───────────────┤
+  │ Actuator: Fan ✓  Buzzer ✗  LED ● hijau      │
+  │ Stats: avg temp 31.7, max gas 3900, alert 4 │
+  ├──────────────────────────────────────────────┤
+  │ [Grafik Tren Suhu/Hum/Gas - Recharts]       │
+  ├──────────────────────────────────────────────┤
+  │ 🤖 AI / Machine Learning                     │
+  │ ┌──────────────┐  ┌──────────────────────┐  │
+  │ │ WASPADA 100% │  │ Prediksi ARIMA       │  │
+  │ │ 31.3°C 68%   │  │ +1j: 31.2°C 68.5%   │  │
+  │ │ gas=112      │  │ +2j: 31.4°C 69.1%   │  │
+  │ └──────────────┘  │ +3j: 31.3°C 69.3%   │  │
+  │                    └──────────────────────┘  │
+  ├──────────────────────────────────────────────┤
+  │ [Data Log] | [Alert Table]                   │
+  └──────────────────────────────────────────────┘
+
+Real-time: data update otomatis tanpa reload
+Mode demo: jika Supabase belum dikonfigurasi
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 13: STRUKTUR FOLDER PROYEK
+# ────────────────────────────────────────────────────────────
+
+smartboard-monitoring/
+├── arduino/
+│   ├── smart_room_monitoring/    ← firmware ESP32
+│   ├── relay_test/               ← test relay
+│   └── wifi_test/                ← test WiFi
+├── smart-room-dashboard/
+│   ├── app/                      ← halaman Next.js
+│   │   ├── page.tsx              ← dashboard utama
+│   │   └── api/                  ← API routes
+│   ├── components/               ← komponen React
+│   ├── lib/                      ← helper & tipe data
+│   ├── ML/                       ← backend Python ML
+│   │   ├── smart_room_ml.py      ← Decision Tree + ARIMA
+│   │   └── preprocessing.py      ← spike detection + interpolasi
+│   ├── EDA/                      ← analisis data
+│   │   ├── eda.py                ← script EDA
+│   │   └── output/               ← plot & rekomendasi
+│   └── supabase/                 ← SQL schema
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 14: KELEBIHAN SISTEM
+# ────────────────────────────────────────────────────────────
+
+1. Offline-proof
+   Alert lokal tetap jalan walau WiFi/server mati
+
+2. Real-time
+   Dashboard update otomatis via Supabase Realtime
+
+3. AI-powered
+   Klasifikasi otomatis (Decision Tree) + prediksi tren (ARIMA)
+
+4. Data-driven threshold
+   Threshold dari EDA data riil, bukan asal tebak
+
+5. Preprocessing
+   Spike detection (IQR) + interpolasi data hilang
+
+6. Cloud database
+   Supabase (PostgreSQL) — bisa diakses dari mana saja
+
+7. Auto-control
+   Mode autocloud: ESP32 otomatis nyalakan fan berdasar AI
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 15: DEMO / CARA JALANKAN
+# ────────────────────────────────────────────────────────────
+
+1. Dashboard:
+   cd smart-room-dashboard
+   npm install
+   npm run dev
+   → Buka http://localhost:3000
+
+2. Backend ML:
+   cd smart-room-dashboard/ML
+   .venv/bin/python smart_room_ml.py
+   → Klasifikasi + prediksi tiap 60 detik
+
+3. Firmware ESP32:
+   - Upload smart_room_monitoring.ino via Arduino IDE
+   - Set WiFi SSID & SERVER_URL
+   - Set API_KEY = "rahasia-untuk-esp32"
+
+4. Auto-fan:
+   Kirim "autocloud" di Serial Monitor
+   → ESP32 polling status AI → fan otomatis
+
+
+# ────────────────────────────────────────────────────────────
+#  SLIDE 16: REFERENSI
+# ────────────────────────────────────────────────────────────
+
+- scikit-learn: Decision Tree documentation
+- statsmodels: ARIMA documentation
+- Supabase: REST API & Realtime
+- Next.js: App Router documentation
+- ArduinoJson: JSON serialization
+- DHT11 datasheet: temperature & humidity sensor
+- MQ-135 datasheet: air quality sensor

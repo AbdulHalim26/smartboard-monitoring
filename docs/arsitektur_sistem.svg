@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="560" viewBox="0 0 900 560" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#555"/>
+    </marker>
+  </defs>
+  <rect width="900" height="560" fill="#f8fafc"/>
+  <text x="450" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e293b">ARSITEKTUR SISTEM — Smart Room IoT Monitoring + AI/ML</text>
+
+  <!-- ESP32 -->
+  <rect x="40" y="120" width="180" height="120" rx="10" fill="#e11d48" stroke="#be123c" stroke-width="2"/>
+  <text x="130" y="148" text-anchor="middle" font-size="14" font-weight="bold" fill="#fff">ESP32</text>
+  <text x="130" y="170" text-anchor="middle" font-size="11" fill="#ffe4e6">DHT11 (suhu + hum)</text>
+  <text x="130" y="186" text-anchor="middle" font-size="11" fill="#ffe4e6">MQ-135 (kualitas udara)</text>
+  <text x="130" y="202" text-anchor="middle" font-size="11" fill="#ffe4e6">LED + Buzzer + Relay Fan</text>
+  <text x="130" y="224" text-anchor="middle" font-size="10" font-style="italic" fill="#fecdd3">kirim tiap 10 detik</text>
+
+  <line x1="220" y1="150" x2="360" y2="150" stroke="#555" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="290" y="140" text-anchor="middle" font-size="10" fill="#64748b">HTTP POST JSON</text>
+  <text x="290" y="170" text-anchor="middle" font-size="10" fill="#64748b">x-api-key</text>
+
+  <!-- Next.js API -->
+  <rect x="365" y="100" width="180" height="150" rx="10" fill="#0ea5e9" stroke="#0284c7" stroke-width="2"/>
+  <text x="455" y="130" text-anchor="middle" font-size="14" font-weight="bold" fill="#fff">Next.js API</text>
+  <text x="455" y="152" text-anchor="middle" font-size="11" fill="#e0f2fe">POST /api/telemetry</text>
+  <text x="455" y="170" text-anchor="middle" font-size="11" fill="#e0f2fe">GET /api/ml</text>
+  <text x="455" y="188" text-anchor="middle" font-size="11" fill="#e0f2fe">validasi Zod</text>
+  <text x="455" y="222" text-anchor="middle" font-size="10" font-style="italic" fill="#bae6fd">web app + dashboard</text>
+
+  <line x1="545" y1="150" x2="625" y2="150" stroke="#555" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Supabase -->
+  <rect x="630" y="100" width="230" height="150" rx="10" fill="#16a34a" stroke="#15803d" stroke-width="2"/>
+  <text x="745" y="130" text-anchor="middle" font-size="14" font-weight="bold" fill="#fff">Supabase</text>
+  <text x="745" y="152" text-anchor="middle" font-size="11" fill="#dcfce7">PostgreSQL + Realtime</text>
+  <text x="745" y="172" text-anchor="middle" font-size="11" fill="#dcfce7">tabel telemetry</text>
+  <text x="745" y="190" text-anchor="middle" font-size="11" fill="#dcfce7">tabel ml_classifications</text>
+  <text x="745" y="208" text-anchor="middle" font-size="11" fill="#dcfce7">tabel ml_predictions</text>
+
+  <!-- Python ML -->
+  <rect x="630" y="380" width="230" height="120" rx="10" fill="#7c3aed" stroke="#6d28d9" stroke-width="2"/>
+  <text x="745" y="410" text-anchor="middle" font-size="14" font-weight="bold" fill="#fff">Python ML Backend</text>
+  <text x="745" y="432" text-anchor="middle" font-size="11" fill="#ede9fe">Preprocessing</text>
+  <text x="745" y="450" text-anchor="middle" font-size="11" fill="#ede9fe">Decision Tree + ARIMA</text>
+  <text x="745" y="468" text-anchor="middle" font-size="11" fill="#ede9fe">baca/tulis Supabase</text>
+  <text x="745" y="488" text-anchor="middle" font-size="10" font-style="italic" fill="#ddd6fe">loop tiap 60 detik</text>
+
+  <!-- dashboard -->
+  <rect x="130" y="380" width="220" height="120" rx="10" fill="#f59e0b" stroke="#b45309" stroke-width="2"/>
+  <text x="240" y="410" text-anchor="middle" font-size="14" font-weight="bold" fill="#fff">Web Dashboard</text>
+  <text x="240" y="432" text-anchor="middle" font-size="11" fill="#fef3c7">Sensor Cards (suhu/hum/gas)</text>
+  <text x="240" y="450" text-anchor="middle" font-size="11" fill="#fef3c7">Grafik tren (Recharts)</text>
+  <text x="240" y="468" text-anchor="middle" font-size="11" fill="#fef3c7">AI/ML: klasifikasi + ARIMA</text>
+  <text x="240" y="486" text-anchor="middle" font-size="11" fill="#fef3c7">Alert table + data log</text>
+
+  <!-- connections -->
+  <line x1="745" y1="250" x2="745" y2="380" stroke="#555" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="760" y="320" font-size="10" fill="#64748b">read/write</text>
+
+  <!-- dashboard to supabase -->
+  <line x1="350" y1="440" x2="630" y2="440" stroke="#555" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="490" y="432" text-anchor="middle" font-size="10" fill="#64748b">real-time subscribe</text>
+  <text x="490" y="450" text-anchor="middle" font-size="10" fill="#64748b">&amp; GET data</text>
+
+  <!-- ESP32 polling ML -->
+  <line x1="130" y1="240" x2="130" y2="380" stroke="#555" stroke-width="2"/>
+  <line x1="130" y1="380" x2="630" y2="380" stroke="#555" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <text x="380" y="372" text-anchor="middle" font-size="10" fill="#64748b">ESP32 polling ml_classifications (autocloud, tiap 15 dtk)</text>
+  <text x="380" y="392" text-anchor="middle" font-size="10" fill="#64748b">→ WASPADA/BAHAYA = fan ON</text>
+</svg>
