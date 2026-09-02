@@ -459,6 +459,11 @@ Mode demo: jika Supabase belum dikonfigurasi
 #  SLIDE 15: STRUKTUR FOLDER PROYEK
 # ────────────────────────────────────────────────────────────
 
+[Gambar: struktur_folder.png — tree struktur proyek, siap paste ke PPT]
+
+Kirim STRUKTUR FOLDER ke Canva lewat gambar struktur_folder.png
+(paling rapih), atau pakai tree teks berikut:
+
 smartboard-monitoring/
 ├── arduino/
 │   ├── smart_room_monitoring/    ← firmware ESP32
