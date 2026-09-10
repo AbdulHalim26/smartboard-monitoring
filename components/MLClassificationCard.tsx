@@ -2,6 +2,11 @@
 
 import type { MLClassification, MLPredictedStatus } from "@/lib/types";
 
+export interface LiveClassification extends MLClassification {
+  reasons?: string[];
+  is_live?: boolean;
+}
+
 const statusStyle: Record<MLPredictedStatus, { bg: string; text: string; border: string }> = {
   NORMAL: { bg: "bg-emerald-500/10", text: "text-emerald-300", border: "border-emerald-500/30" },
   WASPADA: { bg: "bg-amber-500/10", text: "text-amber-300", border: "border-amber-500/30" },
@@ -17,8 +22,8 @@ const statusIcon: Record<MLPredictedStatus, string> = {
 export function MLClassificationCard({ data }: { data: MLClassification | null }) {
   if (!data) {
     return (
-      <div className="rounded-2xl border border-slate-700/50 bg-slate-900/50 p-5 backdrop-blur">
-        <p className="text-sm text-slate-500">Belum ada klasifikasi ML</p>
+      <div className="hud-panel rounded-2xl p-5">
+        <p className="hud-note">Belum ada klasifikasi ML</p>
       </div>
     );
   }
@@ -31,21 +36,19 @@ export function MLClassificationCard({ data }: { data: MLClassification | null }
   });
 
   return (
-    <div className={`rounded-2xl border ${s.border} ${s.bg} p-5 backdrop-blur`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+    <div className={`hud-panel rounded-2xl border p-5 ${s.border}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <span className="text-lg">{statusIcon[data.predicted_status]}</span>
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Klasifikasi AI
-          </span>
+          <span className="hud-title truncate">Klasifikasi AI</span>
         </div>
-        <span className="text-[11px] text-slate-500">{ts}</span>
+        <span className="tnum shrink-0 text-[11px] text-slate-500">{ts}</span>
       </div>
 
       <div className="mt-3 flex items-baseline gap-3">
         <span className={`text-2xl font-bold ${s.text}`}>{data.predicted_status}</span>
         <span className="text-sm text-slate-400">
-          confidence {(data.confidence * 100).toFixed(1)}%
+          confidence {Math.round((data.confidence ?? 0) * 1000) / 10}%
         </span>
       </div>
 
@@ -63,6 +66,19 @@ export function MLClassificationCard({ data }: { data: MLClassification | null }
           <span className="ml-1 font-medium text-slate-200">{data.gas_value}</span>
         </div>
       </div>
+
+      {(data as LiveClassification).reasons?.length ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {(data as LiveClassification).reasons!.map((r) => (
+            <span
+              key={r}
+              className="rounded-md bg-white/5 px-2 py-0.5 text-[11px] text-slate-300"
+            >
+              {r}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

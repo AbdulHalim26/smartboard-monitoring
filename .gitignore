@@ -47,3 +47,11 @@ ML/ml.log
 ML/saved_models/
 __pycache__/
 *.pyc
+
+# runtime database (SQLite) — dibuat otomatis saat server jalan
+data/smartroom.db
+data/smartroom.db-wal
+data/smartroom.db-shm
+
+# duplikat diagram dari pembuatan slide
+docs/struktur_folder copy.png

@@ -30,7 +30,8 @@ body {
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Arial, sans-serif;
   background-image:
     radial-gradient(900px 480px at 12% -8%, rgba(251, 146, 60, 0.09), transparent 60%),
     radial-gradient(800px 420px at 95% 0%, rgba(56, 189, 248, 0.07), transparent 55%),
@@ -46,13 +47,70 @@ body {
   background-attachment: fixed;
 }
 
-.hud-panel {
-  background: linear-gradient(180deg, rgba(20, 29, 47, 0.72), rgba(13, 19, 34, 0.85));
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  backdrop-filter: blur(6px);
+/* ====== Pola HUD konsisten — dipakai semua kartu/panel ====== */
+/* Dibungkus @layer components agar utility Tailwind (mis. border-warna)
+   tetap bisa menimpa nilai default di atas. */
+@layer components {
+  .hud-panel {
+    background: linear-gradient(180deg, rgba(20, 29, 47, 0.72), rgba(13, 19, 34, 0.85));
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    backdrop-filter: blur(6px);
+  }
+
+  /* Judul panel: uppercase dengan tracking lebar */
+  .hud-title {
+    font-size: 0.875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #94a3b8; /* slate-400 */
+  }
+
+  /* Nilai sensor besar — angka fluida mengikuti lebar layar */
+  .value-fluid {
+    font-size: clamp(1.75rem, 1.35rem + 2.4vw, 2.75rem);
+    line-height: 1.05;
+  }
+
+  /* Chip kecil di pojok kartu */
+  .hud-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.125rem 0.625rem;
+    font-size: 0.6875rem; /* 11px */
+    font-weight: 600;
+    color: #94a3b8;
+    white-space: nowrap;
+  }
+
+  /* Catatan kecil / footer text */
+  .hud-note {
+    font-size: 0.6875rem; /* 11px */
+    line-height: 1.5;
+    color: #64748b; /* slate-500 */
+  }
 }
 
 .tnum {
   font-feature-settings: "tnum";
   font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbar tipis yang senada untuk panel/log/tabel */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+}
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
 }

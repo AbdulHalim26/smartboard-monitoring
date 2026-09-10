@@ -1,56 +1,26 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  if (!supabase) {
-    return NextResponse.json(
-      { ok: false, error: "Supabase belum dikonfigurasi" },
-      { status: 500 },
-    );
-  }
-
   const url = new URL(req.url);
   const hoursRaw = Number(url.searchParams.get("hours") ?? "24");
-  const hours = Number.isFinite(hoursRaw)
-    ? Math.min(Math.max(Math.floor(hoursRaw), 1), 720)
-    : 24;
-
+  const hours = Number.isFinite(hoursRaw) ? Math.min(Math.max(Math.floor(hoursRaw), 1), 720) : 24;
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
-  const [{ data: rows, error: rowsErr }, { count: alertCount, error: alertErr }] =
-    await Promise.all([
-      supabase
-        .from("telemetry")
-        .select("*")
-        .gte("created_at", since),
-      supabase
-        .from("alerts")
-        .select("id", { count: "exact", head: true })
-        .gte("created_at", since),
-    ]);
+  const rows = db.prepare(
+    "SELECT * FROM telemetry WHERE created_at >= ?"
+  ).all(since) as { temperature: number | null; humidity: number | null; gas_value: number | null }[];
 
-  if (rowsErr || alertErr) {
-    return NextResponse.json(
-      { ok: false, error: rowsErr?.message ?? alertErr?.message },
-      { status: 500 },
-    );
-  }
+  const alertCount = db.prepare(
+    "SELECT COUNT(*) as cnt FROM alerts WHERE created_at >= ?"
+  ).get(since) as { cnt: number };
 
-  const rowsArr = rows ?? [];
-  const temps = rowsArr
-    .map((r) => r.temperature)
-    .filter((v): v is number => typeof v === "number");
-  const hums = rowsArr
-    .map((r) => r.humidity)
-    .filter((v): v is number => typeof v === "number");
-  const gases = rowsArr
-    .map((r) => r.gas_value)
-    .filter((v): v is number => typeof v === "number");
-
-  const avg = (arr: number[]) =>
-    arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+  const temps = rows.map((r) => r.temperature).filter((v): v is number => typeof v === "number");
+  const hums = rows.map((r) => r.humidity).filter((v): v is number => typeof v === "number");
+  const gases = rows.map((r) => r.gas_value).filter((v): v is number => typeof v === "number");
+  const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
 
   const result = {
     avg_temp: Math.round(avg(temps) * 10) / 10,
@@ -61,11 +31,10 @@ export async function GET(req: Request) {
     max_hum: hums.length ? Math.max(...hums) : 0,
     avg_gas: Math.round(avg(gases)),
     max_gas: gases.length ? Math.max(...gases) : 0,
-    alert_count: alertCount ?? 0,
+    alert_count: alertCount?.cnt ?? 0,
   };
 
-  return NextResponse.json(
-    { ok: true, ...result },
-    { headers: { "Cache-Control": "no-store, max-age=0" } },
-  );
+  return NextResponse.json({ ok: true, ...result }, {
+    headers: { "Cache-Control": "no-store, max-age=0" },
+  });
 }

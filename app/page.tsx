@@ -1,12 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { computeStatus, type AlertType } from "@/lib/thresholds";
-import type { AlertRow, MLClassification, MLPrediction, StatsResult, TelemetryRow } from "@/lib/types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  computeStatus,
+  getGasLabel,
+  THRESHOLDS,
+  type AlertType,
+  type ThresholdSettings,
+} from "@/lib/thresholds";
+import type { AlertRow, MLClassification, StatsResult, TelemetryRow } from "@/lib/types";
 import { SensorCard } from "@/components/SensorCard";
 import { StatusBanner } from "@/components/StatusBanner";
 import { ActuatorCard } from "@/components/ActuatorCard";
+import { ThresholdCard } from "@/components/ThresholdCard";
 import { TelemetryChart } from "@/components/TelemetryChart";
 import { AlertTable } from "@/components/AlertTable";
 import { StatsPanel } from "@/components/StatsPanel";
@@ -14,86 +20,34 @@ import { DataLog } from "@/components/DataLog";
 import { LiveClock } from "@/components/LiveClock";
 import { LastSeen } from "@/components/LastSeen";
 import { MLClassificationCard } from "@/components/MLClassificationCard";
-import { MLPredictionCard } from "@/components/MLPredictionCard";
+import { MLPredictionCard, type LivePrediction } from "@/components/MLPredictionCard";
 
-const isDemo = !supabase;
-
-function makeDemoTelemetry(overrides: Partial<TelemetryRow> = {}): TelemetryRow {
-  return {
-    id: Date.now(),
-    device_id: "esp32-room-01",
-    temperature: 28.4,
-    humidity: 67,
-    gas_value: 2100,
-    status: "NORMAL",
-    fan_on: false,
-    buzzer_on: false,
-    led_red_on: false,
-    led_green_on: true,
-    created_at: new Date().toISOString(),
-    ...overrides,
-  };
-}
-
-function gasLabel(gas: number) {
-  if (gas <= 1500) return { label: "Good", color: "green" as const };
-  if (gas <= 3500) return { label: "Moderate", color: "yellow" as const };
-  return { label: "Poor", color: "red" as const };
-}
+const DEFAULT_SETTINGS: ThresholdSettings = { gas: THRESHOLDS.GAS, temp: THRESHOLDS.TEMP, hum: THRESHOLDS.HUM, autoControl: true };
 
 export default function DashboardPage() {
   const [latest, setLatest] = useState<TelemetryRow | null>(null);
   const [history, setHistory] = useState<TelemetryRow[]>([]);
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
   const [stats, setStats] = useState<StatsResult | null>(null);
+  const [settings, setSettings] = useState<ThresholdSettings>(DEFAULT_SETTINGS);
   const [offline, setOffline] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<number | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [mlLatest, setMlLatest] = useState<MLClassification | null>(null);
-  const [mlPredictions, setMlPredictions] = useState<MLPrediction[]>([]);
+  const [mlLive, setMlLive] = useState<LivePrediction | null>(null);
+  const hasDataRef = useRef(false);
 
   const hydrate = useCallback((row: TelemetryRow) => {
+    hasDataRef.current = true;
     setLatest(row);
     setLastUpdate(Date.now());
     setHistory((prev) => {
       const next = [row, ...prev.filter((r) => r.id !== row.id)];
       return next.sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
     });
   }, []);
-
-  const ingestDemo = useCallback(
-    (row: TelemetryRow) => {
-      hydrate(row);
-      const { status, reasons } = computeStatus({
-        gas_value: row.gas_value ?? 0,
-        temperature: row.temperature ?? 0,
-        humidity: row.humidity ?? 0,
-      });
-      if (status === "ALERT") {
-        const nowIso = new Date().toISOString();
-        const newAlerts = reasons.map((r, i) => ({
-          id: Date.now() + i,
-          telemetry_id: row.id,
-          device_id: row.device_id,
-          alert_type: r,
-          message:
-            r === "GAS"
-              ? "Kualitas udara buruk (gas tinggi)!"
-              : r === "TEMP"
-                ? "Suhu terlalu tinggi!"
-                : "Kelembapan terlalu tinggi!",
-          value: r === "GAS" ? row.gas_value : r === "TEMP" ? row.temperature : row.humidity,
-          threshold: r === "GAS" ? 3500 : r === "TEMP" ? 40.0 : 75.0,
-          created_at: nowIso,
-        }));
-        setAlerts((prev) => [...newAlerts, ...prev].slice(0, 200));
-      }
-    },
-    [hydrate],
-  );
 
   const refreshStats = useCallback(async () => {
     try {
@@ -111,9 +65,6 @@ export default function DashboardPage() {
           max_gas: json.max_gas,
           alert_count: json.alert_count,
         });
-        setFetchError(null);
-      } else {
-        setFetchError(`/api/stats: ${json.error ?? "response tidak ok"}`);
       }
     } catch (err) {
       setFetchError(`/api/stats gagal: ${(err as Error).message}`);
@@ -143,8 +94,9 @@ export default function DashboardPage() {
         hydrate(json.data);
         setOffline(false);
         setFetchError(null);
-      } else {
-        setFetchError(`/api/telemetry/latest: ${json.error ?? "tidak ada data"}`);
+      } else if (!json.data && !hasDataRef.current) {
+        // belum ada data — bukan error, dashboard menunggu sensor
+        setFetchError(null);
       }
     } catch (err) {
       setFetchError(`/api/telemetry/latest gagal: ${(err as Error).message}`);
@@ -159,9 +111,8 @@ export default function DashboardPage() {
         setHistory(
           [...(json.data ?? [])].sort(
             (a, b) =>
-              new Date(b.created_at).getTime() -
-              new Date(a.created_at).getTime(),
-          ),
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
         );
         setFetchError(null);
       } else {
@@ -172,18 +123,64 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const refreshSettings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/settings", { cache: "no-store" });
+      const json = await res.json();
+      if (json.ok && json.settings) {
+        setSettings({
+          gas: json.settings.gas,
+          temp: json.settings.temp,
+          hum: json.settings.hum,
+          autoControl: json.settings.autoControl,
+        });
+      }
+    } catch {
+      // pakai default bila gagal
+    }
+  }, []);
+
+  const handleSettingsSave = useCallback(async (s: ThresholdSettings) => {
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(s),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setSettings(json.settings);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const refreshML = useCallback(async () => {
-    if (isDemo) return;
     try {
       const res = await fetch("/api/ml?limit=5", { cache: "no-store" });
       const json = await res.json();
       if (json.ok) {
         const cls = json.classifications as MLClassification[];
         if (cls.length) setMlLatest(cls[0]);
-        setMlPredictions(json.predictions as MLPrediction[]);
+        if (json.live_prediction) setMlLive(json.live_prediction as LivePrediction);
+        if (json.live_classification && cls.length === 0) {
+          setMlLatest({
+            id: 0,
+            timestamp: json.live_classification.timestamp,
+            temperature: json.live_classification.temperature ?? null,
+            humidity: json.live_classification.humidity ?? null,
+            gas_value: json.live_classification.gas_value ?? null,
+            predicted_status: json.live_classification.status,
+            confidence: json.live_classification.confidence,
+            created_at: new Date().toISOString(),
+          } as MLClassification);
+        }
       }
     } catch {
-      // ML backend belum jalan — silent fail
+      // ML backend optional — silent fail
     }
   }, []);
 
@@ -192,109 +189,70 @@ export default function DashboardPage() {
     refreshHistory();
     refreshAlerts();
     refreshStats();
+    refreshSettings();
     refreshML();
-  }, [refreshLatest, refreshHistory, refreshAlerts, refreshStats, refreshML]);
+  }, [refreshLatest, refreshHistory, refreshAlerts, refreshStats, refreshSettings, refreshML]);
 
   useEffect(() => {
-    if (isDemo) {
-      const seedTimer = setTimeout(() => {
-        hydrate(makeDemoTelemetry());
-        setStats({
-          avg_temp: 28.3,
-          min_temp: 24.1,
-          max_temp: 32.7,
-          avg_hum: 65.2,
-          min_hum: 55.0,
-          max_hum: 78.4,
-          avg_gas: 2100,
-          max_gas: 3900,
-          alert_count: 4,
-        });
-      }, 0);
-
-      // Demo: bacaan baru tiap ±30 detik (pola log data sesuai request)
-      const demoCycle = [
-        { gas_value: 1850 },
-        { gas_value: 2100, temperature: 28.7, humidity: 66 },
-        { gas_value: 2450, temperature: 29.1, humidity: 68 },
-        { gas_value: 2720, temperature: 29.4, humidity: 69 },
-        { gas_value: 3120, temperature: 29.8, humidity: 71 },
-        { gas_value: 3900, status: "ALERT", fan_on: true, buzzer_on: true, led_red_on: true, led_green_on: false },
-      ] as const;
-      let i = 0;
-      const demo = setInterval(() => {
-        const step = demoCycle[i % demoCycle.length];
-        i++;
-        ingestDemo(makeDemoTelemetry(step));
-      }, 30_000);
-      return () => {
-        clearTimeout(seedTimer);
-        clearInterval(demo);
-      };
-    }
-
     const initialLoadTimer = setTimeout(refreshAll, 0);
-
-    // Polling 5s: data terbaru + alert + stats
     const pollTimer = setInterval(() => {
       refreshLatest();
       refreshAlerts();
       refreshStats();
+      refreshSettings();
+      refreshML();
     }, 5000);
-
-    // Reset penuh tiap 30 detik: history/graph relog seluruh data
     const cycleTimer = setInterval(refreshAll, 30_000);
-
     return () => {
       clearTimeout(initialLoadTimer);
       clearInterval(pollTimer);
       clearInterval(cycleTimer);
     };
-  }, [refreshAll, refreshLatest, refreshAlerts, refreshStats, hydrate, ingestDemo]);
+  }, [refreshAll, refreshLatest, refreshAlerts, refreshStats, refreshSettings, refreshML]);
 
   useEffect(() => {
-    if (isDemo) return;
-
-    const channel = supabase
-      ?.channel("telemetry-realtime")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "telemetry" },
-        (payload) => {
-          hydrate(payload.new as TelemetryRow);
-          setOffline(false);
-          refreshAlerts();
-          refreshStats();
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase?.removeChannel(channel as never);
-    };
-  }, [hydrate, refreshAlerts, refreshStats]);
-
-  // Deteksi offline: reset/nyalakan tiap 1 detik jika > 30 detik tanpa data
-  useEffect(() => {
-    if (isDemo) return;
     const offlineTimer = setInterval(() => {
-      if (lastUpdate && Date.now() - lastUpdate > 30_000) {
-        setOffline(true);
-      }
+      if (lastUpdate && Date.now() - lastUpdate > 30_000) setOffline(true);
     }, 1000);
     return () => clearInterval(offlineTimer);
   }, [lastUpdate]);
 
+  const handleActuatorToggle = useCallback(
+    async (command: string, on: boolean) => {
+      try {
+        const res = await fetch("/api/actuator", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            device_id: latest?.device_id ?? "esp32-room-01",
+            command,
+            payload: on ? "1" : "0",
+          }),
+        });
+        const json = await res.json();
+        if (json.ok) return true;
+        setFetchError(`/api/actuator: ${json.error ?? "gagal"}`);
+        return false;
+      } catch (err) {
+        setFetchError(`/api/actuator gagal: ${(err as Error).message}`);
+        return false;
+      }
+    },
+    [latest]
+  );
+
   const status = latest
-    ? computeStatus({
-        gas_value: latest.gas_value ?? 0,
-        temperature: latest.temperature ?? 0,
-        humidity: latest.humidity ?? 0,
-      })
+    ? computeStatus(
+        {
+          gas_value: latest.gas_value ?? 0,
+          temperature: latest.temperature ?? 0,
+          humidity: latest.humidity ?? 0,
+        },
+        settings
+      )
     : { status: "NORMAL" as const, reasons: [] as AlertType[] };
 
-  const gas = gasLabel(latest?.gas_value ?? 2100);
-
+  const gas = latest ? getGasLabel(latest.gas_value ?? 0, settings.gas) : null;
   const timeFmt = (t: number) =>
     new Date(t).toLocaleTimeString("id-ID", {
       hour: "2-digit",
@@ -302,20 +260,28 @@ export default function DashboardPage() {
       second: "2-digit",
     });
 
-  return (    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
-      {isDemo && (
-        <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-200">
-          {"\u26A0\uFE0F"} Mode demo: Supabase belum dikonfigurasi. Data berupa
-          simulasi (±30 detik per bacaan). Tambahkan env &amp; jalankan SQL schema untuk mode live.
-        </div>
-      )}
-
+  return (
+    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
       {fetchError && (
         <div className="flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300">
           <span className="mt-0.5">{"\u26A0\uFE0F"}</span>
           <span>
             <b>Fetch error:</b> {fetchError}
           </span>
+        </div>
+      )}
+
+      {!latest && !fetchError && (
+        <div className="flex items-center gap-3 rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-6 text-sm text-sky-200">
+          <span className="relative flex h-3 w-3">
+            <span className="absolute h-full w-full animate-ping rounded-full bg-sky-400 opacity-60" />
+            <span className="relative h-3 w-3 rounded-full bg-sky-400" />
+          </span>
+          <div>
+            <b>Menunggu data sensor...</b> Dashboard otomatis menampilkan data begitu ESP32
+            mengirim bacaan pertama. Pastikan ESP32 terhubung ke jaringan WiFi yang sama dan
+            server ini bisa diakses dari ESP32.
+          </div>
         </div>
       )}
 
@@ -334,8 +300,7 @@ export default function DashboardPage() {
             </p>
           </div>
         </div>
-
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <span
             className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-bold ${
               offline
@@ -371,7 +336,7 @@ export default function DashboardPage() {
 
       {/* Sensor readouts */}
       {latest && (
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <section className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-4">
           <SensorCard
             title="Suhu"
             icon="\uD83C\uDF21\uFE0F"
@@ -379,7 +344,7 @@ export default function DashboardPage() {
             value={latest.temperature != null ? latest.temperature.toFixed(1) : "--"}
             unit="°C"
             statusColor={
-              latest.temperature != null && latest.temperature > 40 ? "red" : "default"
+              latest.temperature != null && latest.temperature > settings.temp ? "red" : "default"
             }
           />
           <SensorCard
@@ -389,30 +354,45 @@ export default function DashboardPage() {
             value={latest.humidity != null ? latest.humidity.toFixed(0) : "--"}
             unit="%RH"
             statusColor={
-              latest.humidity != null && latest.humidity > 75 ? "red" : "default"
+              latest.humidity != null && latest.humidity > settings.hum ? "red" : "default"
             }
           />
           <SensorCard
-            title="Gas"
+            title="Gas / Asap"
             icon="\uD83C\uDF2B\uFE0F"
             accent="gas"
             value={latest.gas_value ?? "--"}
             unit="ADC"
-            statusColor={gas.color}
+            statusColor={gas ? gasLevelColor(gas.level) : "default"}
           />
         </section>
       )}
 
-      {/* Actuator + stats */}
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* Actuator + kalibrasi + stats */}
+      <section className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,17rem),1fr))] gap-4">
         {latest && (
           <ActuatorCard
             fanOn={latest.fan_on}
             buzzerOn={latest.buzzer_on}
             ledRedOn={latest.led_red_on}
             ledGreenOn={latest.led_green_on}
+            gasThreshold={settings.gas}
+            onToggle={handleActuatorToggle}
           />
         )}
+        <ThresholdCard
+          settings={settings}
+          current={
+            latest
+              ? {
+                  temperature: latest.temperature,
+                  humidity: latest.humidity,
+                  gas_value: latest.gas_value,
+                }
+              : null
+          }
+          onSave={handleSettingsSave}
+        />
         <StatsPanel stats={stats} />
       </section>
 
@@ -425,21 +405,33 @@ export default function DashboardPage() {
           <span>{"\uD83E\uDD16"} AI / Machine Learning</span>
           <span className="inline-block h-px flex-1 bg-slate-700/60" />
         </h2>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <MLClassificationCard data={mlLatest} />
-          <MLPredictionCard predictions={mlPredictions} />
+          <MLPredictionCard live={mlLive} />
         </div>
       </section>
 
       {/* Log data real-time per bacaan */}
       <DataLog data={history} />
-
       <AlertTable alerts={alerts} />
 
-      <footer className="pb-4 text-center text-[11px] text-slate-600">
-        Smart Room IoT Monitoring · threshold gas 3500 / suhu 40°C / kelembapan 75% ·
+      <footer className="hud-note pb-4 text-center">
+        Smart Room IoT Monitoring · threshold gas {settings.gas} / suhu {settings.temp}°C /
+        kelembapan {settings.hum}% · auto-kontrol {settings.autoControl ? "AKTIF" : "mati"} ·
         data dikirim ESP32 tiap 10 detik
       </footer>
     </main>
   );
+}
+
+function gasLevelColor(level: "GOOD" | "MODERATE" | "POOR" | "HAZARDOUS") {
+  switch (level) {
+    case "GOOD":
+      return "green" as const;
+    case "MODERATE":
+    case "POOR":
+      return "yellow" as const;
+    case "HAZARDOUS":
+      return "red" as const;
+  }
 }

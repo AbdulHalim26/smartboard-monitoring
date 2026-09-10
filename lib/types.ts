@@ -61,3 +61,12 @@ export interface MLPrediction {
   model_type: string;
   created_at: string;
 }
+
+export interface DeviceCommand {
+  id: number;
+  device_id: string;
+  command: string;
+  payload: string | null;
+  executed: boolean;
+  created_at: string;
+}

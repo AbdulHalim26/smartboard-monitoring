@@ -26,13 +26,9 @@ export function TelemetryChart({ data }: TelemetryChartProps) {
 
   return (
     <div className="hud-panel rounded-2xl p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Grafik Tren
-        </h2>
-        <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-medium text-slate-400">
-          24 jam · realtime
-        </span>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h2 className="hud-title">Grafik Tren</h2>
+        <span className="hud-chip">24 jam · realtime</span>
       </div>
       <div className="h-72 w-full">
         <ResponsiveContainer width="100%" height="100%">

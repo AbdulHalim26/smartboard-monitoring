@@ -56,23 +56,21 @@ export function SensorCard({
       <div
         className={`pointer-events-none absolute inset-0 after:absolute after:-top-10 after:left-1/2 after:h-24 after:w-64 after:-translate-x-1/2 after:rounded-full after:blur-3xl ${a.glow}`}
       />
-      <div className="relative flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-          <span className="text-base">{icon}</span>
-          <span>{title}</span>
+      <div className="relative flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">
+          <span className="shrink-0 text-base">{icon}</span>
+          <span className="truncate">{title}</span>
         </div>
-        <span
-          className={`flex h-2.5 w-2.5 items-center justify-center`}
-        >
-          <span className={`h-2.5 w-2.5 rounded-full ${stateDot[statusColor]} ${statusColor === "default" ? "" : "animate-pulse"}`} />
+        <span className="ml-auto shrink-0">
+          <span className={`block h-2.5 w-2.5 rounded-full ${stateDot[statusColor]} ${statusColor === "default" ? "" : "animate-pulse"}`} />
         </span>
       </div>
 
-      <div className="relative mt-4 flex items-baseline gap-1.5">
-        <span className={`tnum text-5xl font-bold leading-none ${a.text}`}>
+      <div className="relative mt-4 flex min-w-0 items-baseline gap-1.5">
+        <span className={`tnum value-fluid min-w-0 truncate font-bold ${a.text}`}>
           {typeof value === "number" ? value.toLocaleString() : value}
         </span>
-        <span className="tnum text-sm font-medium text-slate-400">{unit}</span>
+        <span className="tnum shrink-0 text-sm font-medium text-slate-400">{unit}</span>
       </div>
 
       <div className={`relative mt-3 h-1 w-full overflow-hidden rounded-full bg-white/5`}>

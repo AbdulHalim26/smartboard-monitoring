@@ -21,16 +21,12 @@ export function DataLog({ data }: DataLogProps) {
 
   return (
     <div className="hud-panel overflow-hidden rounded-2xl">
-      <div className="flex items-center justify-between border-b border-white/5 px-5 py-4">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Log Data Real-time
-        </h2>
-        <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-medium text-slate-400">
-          interval ±30 dtk
-        </span>
+      <div className="flex items-center justify-between gap-2 border-b border-white/5 px-5 py-4">
+        <h2 className="hud-title">Log Data Real-time</h2>
+        <span className="hud-chip">interval ±30 dtk</span>
       </div>
-      <div className="max-h-96 overflow-y-auto">
-        <table className="w-full text-left text-[13px]">
+      <div className="scroll-thin max-h-96 overflow-auto">
+        <table className="w-full min-w-[560px] text-left text-[13px]">
           <thead className="sticky top-0 bg-[#0d1322]">
             <tr className="border-b border-white/5 text-[11px] uppercase tracking-wider text-slate-500">
               <th className="px-5 py-3 font-medium">Waktu</th>

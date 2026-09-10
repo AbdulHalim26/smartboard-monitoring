@@ -11,16 +11,14 @@ export function StatsPanel({ stats }: StatsPanelProps) {
   if (!stats) return null;
   return (
     <div className="hud-panel rounded-2xl p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
-          24 Jam
-        </h2>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h2 className="hud-title">Statistik 24 Jam</h2>
         <span className="rounded-full bg-red-500/15 px-2.5 py-0.5 text-[11px] font-bold text-red-300">
           {stats.alert_count} alert
         </span>
       </div>
 
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
         <Mini label="Temp" unit="°C" color="text-orange-300" avg={fmt1(stats.avg_temp)} min={fmt1(stats.min_temp)} max={fmt1(stats.max_temp)} />
         <Mini label="Hum" unit="%" color="text-sky-300" avg={fmt1(stats.avg_hum)} min={fmt1(stats.min_hum)} max={fmt1(stats.max_hum)} />
         <Mini label="Gas" unit="ADC" color="text-lime-300" avg={fmt0(stats.avg_gas)} min="-" max={fmt0(stats.max_gas)} />

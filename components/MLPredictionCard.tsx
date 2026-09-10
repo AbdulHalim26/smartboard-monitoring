@@ -1,7 +1,5 @@
 "use client";
 
-import type { MLPrediction } from "@/lib/types";
-
 const colLabel: Record<string, string> = {
   temperature: "Suhu",
   humidity: "Kelembapan",
@@ -15,68 +13,58 @@ const colUnit: Record<string, string> = {
 };
 
 const colColor: Record<string, string> = {
-  temperature: "text-red-300",
-  humidity: "text-blue-300",
-  gas_value: "text-amber-300",
+  temperature: "text-orange-300",
+  humidity: "text-sky-300",
+  gas_value: "text-lime-300",
 };
 
-export function MLPredictionCard({ predictions }: { predictions: MLPrediction[] }) {
-  if (!predictions.length) {
+export interface LivePrediction {
+  temperature: number;
+  humidity: number;
+  gas_value: number;
+}
+
+export function MLPredictionCard({
+  live,
+}: {
+  live: LivePrediction | null;
+}) {
+  if (!live) {
     return (
-      <div className="rounded-2xl border border-slate-700/50 bg-slate-900/50 p-5 backdrop-blur">
-        <p className="text-sm text-slate-500">Belum ada prediksi ARIMA</p>
+      <div className="hud-panel rounded-2xl p-5">
+        <p className="hud-note">Belum ada prediksi — tunggu data sensor masuk.</p>
       </div>
     );
   }
 
-  // Group by target_timestamp, then by column
-  const grouped = new Map<string, MLPrediction[]>();
-  for (const p of predictions) {
-    const key = p.target_timestamp;
-    if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key)!.push(p);
-  }
-
-  // Take closest 3 forecasts
-  const entries = [...grouped.entries()].slice(0, 3);
+  const items: { key: "temperature" | "humidity" | "gas_value"; label: string; value: number; unit: string }[] = [
+    { key: "temperature", label: colLabel.temperature, value: live.temperature, unit: colUnit.temperature },
+    { key: "humidity", label: colLabel.humidity, value: live.humidity, unit: colUnit.humidity },
+    { key: "gas_value", label: colLabel.gas_value, value: live.gas_value, unit: colUnit.gas_value },
+  ];
 
   return (
-    <div className="rounded-2xl border border-purple-500/30 bg-purple-500/10 p-5 backdrop-blur">
-      <div className="flex items-center gap-2">
-        <span className="text-lg">{"\uD83D\uDD2E"}</span>
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Prediksi ARIMA
-        </span>
+    <div className="hud-panel rounded-2xl border border-purple-500/30 p-5">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="shrink-0 text-lg">{"\uD83D\uDD2E"}</span>
+        <span className="hud-title truncate">Prediksi Bacaan Berikutnya</span>
       </div>
 
-      <div className="mt-3 space-y-3">
-        {entries.map(([targetTs, preds]) => {
-          const created = preds[0]?.created_at ?? targetTs;
-          const h = Math.round(
-            (new Date(targetTs).getTime() - new Date(created).getTime()) / 3600000,
-          );
-          const label = h <= 0 ? "Sekarang" : `+${h} jam`;
-
-          return (
-            <div key={targetTs}>
-              <div className="mb-1 text-[11px] font-medium text-slate-500">{label}</div>
-              <div className="grid grid-cols-3 gap-2">
-                {preds.map((p) => (
-                  <div key={p.column_name} className="rounded-lg bg-slate-950/40 px-2 py-1.5">
-                    <div className="text-[10px] text-slate-500">{colLabel[p.column_name]}</div>
-                    <div className={`text-sm font-bold ${colColor[p.column_name]}`}>
-                      {p.predicted_value.toFixed(1)}
-                      <span className="ml-0.5 text-[10px] font-normal text-slate-500">
-                        {colUnit[p.column_name]}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {items.map((it) => (
+          <div key={it.key} className="rounded-lg bg-slate-950/40 px-2 py-2.5">
+            <div className="text-[10px] text-slate-500">{it.label}</div>
+            <div className={`tnum text-lg font-bold ${colColor[it.key]}`}>
+              {it.value.toFixed(1)}
+              <span className="ml-0.5 text-[11px] font-normal text-slate-500">{it.unit}</span>
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
+
+      <p className="hud-note mt-3">
+        Prediksi berbasis tren (regresi linier) dari 5 bacaan terakhir sensor.
+      </p>
     </div>
   );
 }

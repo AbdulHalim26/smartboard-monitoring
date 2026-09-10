@@ -14,7 +14,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Smart Room Monitoring",
-  description: "Dashboard monitoring ruangan real-time berbasis IoT (ESP32 + Supabase)",
+  description:
+    "Dashboard monitoring ruangan real-time berbasis IoT (ESP32 + Next.js + SQLite)",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

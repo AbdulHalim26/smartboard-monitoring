@@ -13,16 +13,12 @@ const TYPE_STYLE: Record<string, { badge: string; bar: string }> = {
 export function AlertTable({ alerts }: AlertTableProps) {
   return (
     <div className="hud-panel overflow-hidden rounded-2xl">
-      <div className="flex items-center justify-between border-b border-white/5 px-5 py-4">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Riwayat Alert
-        </h2>
-        <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-medium text-slate-400">
-          {alerts.length} entri
-        </span>
+      <div className="flex items-center justify-between gap-2 border-b border-white/5 px-5 py-4">
+        <h2 className="hud-title">Riwayat Alert</h2>
+        <span className="hud-chip">{alerts.length} entri</span>
       </div>
-      <div className="max-h-96 overflow-y-auto">
-        <table className="w-full text-left text-sm">
+      <div className="scroll-thin max-h-96 overflow-auto">
+        <table className="w-full min-w-[680px] text-left text-sm">
           <thead className="sticky top-0 bg-[#0d1322]">
             <tr className="border-b border-white/5 text-[11px] uppercase tracking-wider text-slate-500">
               <th className="px-5 py-3 font-medium">Waktu</th>

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { telemetrySchema } from "@/lib/validate";
-import { computeStatus } from "@/lib/thresholds";
-import { supabase } from "@/lib/supabase";
+import { computeStatus, type ThresholdSettings } from "@/lib/thresholds";
+import { getThresholdSettings } from "@/lib/settings";
+import { db } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -16,15 +17,48 @@ async function checkApiKey(req: Request): Promise<boolean> {
   return Boolean(key && key === process.env.IOT_API_KEY);
 }
 
+// Antrikan perintah otomatis ke ESP32 agar aktuator mengikuti status.
+// Hanya kirim ketika state BERUBAH (beda dari yang dilaporkan ESP32),
+// dan hindari duplikat kalau masih ada command pending sejenis.
+function queueAutoControl(
+  deviceId: string,
+  current: { fan_on: boolean; buzzer_on: boolean; led_red_on: boolean; led_green_on: boolean },
+  status: "NORMAL" | "ALERT"
+) {
+  const pairs: [string, boolean][] = [];
+  if (status === "ALERT") {
+    if (!current.fan_on) pairs.push(["fan_on", true]);
+    if (!current.buzzer_on) pairs.push(["buzzer_on", true]);
+    if (!current.led_red_on) pairs.push(["led_red_on", true]);
+    if (current.led_green_on) pairs.push(["led_green_off", false]);
+  } else {
+    if (current.fan_on) pairs.push(["fan_off", false]);
+    if (current.buzzer_on) pairs.push(["buzzer_off", false]);
+    if (current.led_red_on) pairs.push(["led_red_off", false]);
+    if (!current.led_green_on) pairs.push(["led_green_on", true]);
+  }
+
+  if (pairs.length === 0) return;
+
+  const existsPending = db.prepare(
+    "SELECT id FROM device_commands WHERE device_id = ? AND command = ? AND executed = 0 LIMIT 1"
+  );
+  const insert = db.prepare(
+    "INSERT INTO device_commands (device_id, command, payload) VALUES (?, ?, ?)"
+  );
+  const t = db.transaction(() => {
+    for (const [cmd, on] of pairs) {
+      if (!existsPending.get(deviceId, cmd)) {
+        insert.run(deviceId, cmd, on ? "1" : "0");
+      }
+    }
+  });
+  t();
+}
+
 export async function POST(req: Request) {
   if (!(await checkApiKey(req))) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
-  if (!supabase) {
-    return NextResponse.json(
-      { ok: false, error: "Supabase belum dikonfigurasi" },
-      { status: 500 },
-    );
   }
 
   let body: unknown;
@@ -36,97 +70,99 @@ export async function POST(req: Request) {
 
   const parsed = telemetrySchema.safeParse(body);
   if (!parsed.success) {
-    const message = parsed.error.issues
-      .map((i) => `${i.path.join(".")}: ${i.message}`)
-      .join("; ");
+    const message = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
 
-  const { status, reasons } = computeStatus({
-    gas_value: parsed.data.gas_value,
-    temperature: parsed.data.temperature,
-    humidity: parsed.data.humidity,
-  });
+  const settings: ThresholdSettings = getThresholdSettings();
+  const { status, reasons } = computeStatus(
+    {
+      gas_value: parsed.data.gas_value,
+      temperature: parsed.data.temperature,
+      humidity: parsed.data.humidity,
+    },
+    settings
+  );
 
-  const row = {
-    device_id: parsed.data.device_id,
-    temperature: parsed.data.temperature,
-    humidity: parsed.data.humidity,
-    gas_value: parsed.data.gas_value,
+  const insertStmt = db.prepare(`
+    INSERT INTO telemetry (device_id, temperature, humidity, gas_value, status, fan_on, buzzer_on, led_red_on, led_green_on)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const result = insertStmt.run(
+    parsed.data.device_id,
+    parsed.data.temperature,
+    parsed.data.humidity,
+    parsed.data.gas_value,
     status,
-    fan_on: parsed.data.fan_on,
-    buzzer_on: parsed.data.buzzer_on,
-    led_red_on: parsed.data.led_red_on,
-    led_green_on: parsed.data.led_green_on,
-  };
+    parsed.data.fan_on ? 1 : 0,
+    parsed.data.buzzer_on ? 1 : 0,
+    parsed.data.led_red_on ? 1 : 0,
+    parsed.data.led_green_on ? 1 : 0,
+  );
 
-  const { data: inserted, error: insertErr } = await supabase
-    .from("telemetry")
-    .insert(row)
-    .select()
-    .single();
-
-  if (insertErr || !inserted) {
-    return NextResponse.json(
-      { ok: false, error: insertErr?.message ?? "Gagal insert telemetry" },
-      { status: 500 },
-    );
-  }
+  const insertedId = result.lastInsertRowid;
 
   if (status === "ALERT") {
-    const alerts = reasons.map((r) => ({
-      telemetry_id: inserted.id,
-      device_id: inserted.device_id,
-      alert_type: r,
-      message: ALERT_MESSAGES[r],
-      value: r === "GAS" ? inserted.gas_value : r === "TEMP" ? inserted.temperature : inserted.humidity,
-      threshold:
-        r === "GAS"
-          ? 3500
-          : r === "TEMP"
-            ? 40.0
-            : 75.0,
-    }));
-    await supabase.from("alerts").insert(alerts);
+    const insertAlert = db.prepare(`
+      INSERT INTO alerts (telemetry_id, device_id, alert_type, message, value, threshold)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const insertMany = db.transaction((reasonsList: string[]) => {
+      for (const r of reasonsList) {
+        insertAlert.run(
+          insertedId,
+          parsed.data.device_id,
+          r,
+          ALERT_MESSAGES[r],
+          r === "GAS"
+            ? parsed.data.gas_value
+            : r === "TEMP"
+              ? parsed.data.temperature
+              : parsed.data.humidity,
+          r === "GAS" ? settings.gas : r === "TEMP" ? settings.temp : settings.hum,
+        );
+      }
+    });
+    insertMany(reasons);
   }
 
-  return NextResponse.json(
-    { ok: true, id: inserted.id, status: inserted.status },
-    { status: 201 },
-  );
+  if (settings.autoControl) {
+    queueAutoControl(parsed.data.device_id, parsed.data, status);
+  }
+
+  return NextResponse.json({ ok: true, id: insertedId, status }, { status: 201 });
 }
 
 export async function GET(req: Request) {
-  if (!supabase) {
-    return NextResponse.json(
-      { ok: false, error: "Supabase belum dikonfigurasi" },
-      { status: 500 },
-    );
-  }
-
   const url = new URL(req.url);
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
   const limitRaw = Number(url.searchParams.get("limit") ?? "100");
-  const limit = Number.isFinite(limitRaw)
-    ? Math.min(Math.max(Math.floor(limitRaw), 1), 500)
-    : 100;
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.floor(limitRaw), 1), 500) : 100;
 
-  let q = supabase
-    .from("telemetry")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  let query = "SELECT * FROM telemetry";
+  const conditions: string[] = [];
+  const params: unknown[] = [];
 
-  if (from) q = q.gte("created_at", from);
-  if (to) q = q.lte("created_at", to);
-
-  const { data, error } = await q;
-  if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  if (from) {
+    conditions.push("created_at >= ?");
+    params.push(from);
   }
-  return NextResponse.json(
-    { ok: true, data },
-    { headers: { "Cache-Control": "no-store, max-age=0" } },
-  );
+  if (to) {
+    conditions.push("created_at <= ?");
+    params.push(to);
+  }
+
+  if (conditions.length > 0) {
+    query += " WHERE " + conditions.join(" AND ");
+  }
+  query += " ORDER BY created_at DESC LIMIT ?";
+  params.push(limit);
+
+  const rows = db.prepare(query).all(...params);
+
+  return NextResponse.json({ ok: true, data: rows }, {
+    headers: { "Cache-Control": "no-store, max-age=0" },
+  });
 }
